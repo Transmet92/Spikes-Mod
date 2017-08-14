@@ -16,22 +16,15 @@
 #include <stdio.h>
 #include <vector>
 #include <list>
+#include <tmmintrin.h>
 
 using namespace std;
 
+#define VEH_POOL_SIZE 2048
+
 bool inline get_key_pressed(int nVirtKey) { return (GetAsyncKeyState(nVirtKey) & 0x8000) != 0; }
-void draw_text_shadow(std::string caption, float lineHeight, float lineTop, float lineLeft, float textLeft, int text_col[4], int font = 0, float text_scale = 0.35)
+void draw_text_shadow(char* caption, float x, float y, int text_col[4], int font = 0, float text_scale = 0.35)
 {
-	int screen_w, screen_h;
-	GRAPHICS::GET_SCREEN_RESOLUTION(&screen_w, &screen_h);
-
-	textLeft += lineLeft;
-
-	float lineTopScaled = lineTop / (float)screen_h;
-	float textLeftScaled = textLeft / (float)screen_w;
-	float lineHeightScaled = lineHeight / (float)screen_h;
-	float lineLeftScaled = lineLeft / (float)screen_w;
-
 	UI::SET_TEXT_FONT(font);
 	UI::SET_TEXT_SCALE(0.0, text_scale);
 	UI::SET_TEXT_COLOUR(text_col[0], text_col[1], text_col[2], text_col[3]);
@@ -39,8 +32,8 @@ void draw_text_shadow(std::string caption, float lineHeight, float lineTop, floa
 	UI::SET_TEXT_DROPSHADOW(5, 0, 0, 0, 255);
 	UI::SET_TEXT_EDGE(0, 0, 0, 0, 0);
 	UI::_SET_TEXT_ENTRY("STRING");
-	UI::_ADD_TEXT_COMPONENT_STRING((LPSTR)caption.c_str());
-	UI::_DRAW_TEXT(textLeftScaled, (((lineTopScaled + 0.00278f) + lineHeightScaled) - 0.005f));
+	UI::_ADD_TEXT_COMPONENT_STRING(caption);
+	UI::_DRAW_TEXT(x, y);
 
 	UI::SET_TEXT_FONT(font);
 	UI::SET_TEXT_SCALE(0.0, text_scale);
@@ -49,31 +42,9 @@ void draw_text_shadow(std::string caption, float lineHeight, float lineTop, floa
 	UI::SET_TEXT_DROPSHADOW(5, 0, 0, 0, 255);
 	UI::SET_TEXT_EDGE(0, 0, 0, 0, 0);
 	UI::_SET_TEXT_GXT_ENTRY("STRING");
-	UI::_ADD_TEXT_COMPONENT_STRING((LPSTR)caption.c_str());
-	int num25 = UI::_0x9040DFB09BE75706(textLeftScaled, (((lineTopScaled + 0.00278f) + lineHeightScaled) - 0.005f));
-}
+	UI::_ADD_TEXT_COMPONENT_STRING(caption);
 
-static inline void applyDestroy(Vehicle veh, int index)
-{
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 5, 1, 0x447a0000);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 4, 1, 0x447a0000);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 0, 1, 0x447a0000);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 1, 1, 0x447a0000);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 5, 0, 0x447a0000);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 3, 0, 0x447a0000);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 0, 0, 0x447a0000);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 1, 0, 0x447a0000);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 5, 0, 1.0);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 3, 0, 1.0);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 0, 0, 1.0);
-	VEHICLE::SET_VEHICLE_TYRE_BURST(veh, 1, 0, 1.0);
-}
-
-void notifMess(char* Message)
-{
-	UI::_SET_NOTIFICATION_TEXT_ENTRY("STRING");
-	UI::_ADD_TEXT_COMPONENT_STRING(Message);
-	UI::_DRAW_NOTIFICATION(0, 1);
+	UI::_0x9040DFB09BE75706(x, y);
 }
 
 struct Spike {
@@ -97,7 +68,6 @@ static const Tyre tyres[] = {
 	{ 5, "wheel_rr" },
 };
 
-
 static inline float __VDIST(Vector3 &One, Vector3 &Two) {
 	return fabsf(One.x - Two.x) + fabsf(One.y - Two.y) + fabsf(One.z - Two.z);
 }
@@ -111,14 +81,14 @@ static bool equality(char* buf, const char* determ, int sizeBuf, int sizeDeterm)
 	return bypass;
 }
 
-static int parseData(char* buf, const char* pattern, int limit, int size) {
+static int parseData(char* buf, const char* pattern, int limit, int size, bool boolean) {
 	if (equality(buf, pattern, limit, size) == true)
 	{
 		buf += size;
 		char* back = buf;
 		for (; *buf != ';'; buf++) continue;
 		*buf = 0x00;
-		return strtol(back, NULL, 16);
+		return (boolean ? (*back == '1' ? -1 : -2) : strtol(back, NULL, 16));
 	}
 	return 0;
 }
@@ -128,7 +98,8 @@ void ScriptMain() // EntryPoint
 	int DEPLOY_KEY = VK_ADD;
 	int CLEAR_KEY = VK_SUBTRACT;
 	int TOGGLE_CAM_KEY = 0x4F;
-	int TOGGLE_ME_KEY = 0x4B;
+	// int TOGGLE_ME_KEY = 0x4B;
+	bool USE_CONTROLLER = false;
 
 	char buffer[512];
 	GetModuleFileName(NULL, buffer, MAX_PATH);
@@ -150,14 +121,17 @@ void ScriptMain() // EntryPoint
 
 		for (unsigned short i = 0; i < read; i++)
 		{
-			int cur = parseData(buffer + i, "DEPLOY=0x", (int)read, 9);
+			int cur = parseData(buffer + i, "DEPLOY=0x", (int)read, 9, false);
 			if (cur != 0x00) DEPLOY_KEY = cur;
 
-			cur = parseData(buffer + i, "CLEAR=0x", (int)read, 8);
+			cur = parseData(buffer + i, "CLEAR=0x", (int)read, 8, false);
 			if (cur != 0x00) CLEAR_KEY = cur;
 
-			cur = parseData(buffer + i, "TOGGLE_CAM=0x", (int)read, 13);
+			cur = parseData(buffer + i, "TOGGLE_CAM=0x", (int)read, 13, false);
 			if (cur != 0x00) TOGGLE_CAM_KEY = cur;
+
+			cur = parseData(buffer + i, "USE_CONTROLLER=", (int)read, 15, true);
+			if (cur != 0x00) USE_CONTROLLER = cur == -1 ? true : false;
 
 			// cur = parseData(buffer + i, "TOGGLE_ME=0x", read, 12);
 			// if (cur != 0x00) TOGGLE_ME_KEY = cur;
@@ -166,10 +140,9 @@ void ScriptMain() // EntryPoint
 	}
 
 
-	int rectColor[4] = { 255, 255, 255, 180 };
 	int textColor[4] = { 255, 255, 255, 255 };
 	bool useCam = true;
-	bool includeMe = false;
+	// bool includeMe = false;
 
 	vector<Spike> spikes = vector<Spike>();
 	unsigned short spikesCount = 0;
@@ -185,14 +158,11 @@ void ScriptMain() // EntryPoint
 	bool showVictims = false;
 	
 	Cam camScripted = CAM::CREATE_CAM("DEFAULT_SCRIPTED_CAMERA", 1);
-	CAM::SET_CAM_PARAMS(camScripted, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 29.0f, 3000, 3, 3, 2);
-
-	int screen_w, screen_h;
-	GRAPHICS::GET_SCREEN_RESOLUTION(&screen_w, &screen_h);
+	CAM::SET_CAM_PARAMS(camScripted, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 30.0f, 3000, 3, 3, 2);
 
 	unsigned int pressTick = 0;
 
-	int PoolVehStck[1024];
+	int* PoolVehHeap = new int[VEH_POOL_SIZE]; // PREFER STACK FOR POOL NOT HEAVY
 	unsigned int TickCheck = GetTickCount();
 	for (;;)
 	{
@@ -200,7 +170,8 @@ void ScriptMain() // EntryPoint
 		int myVeh = PED::GET_VEHICLE_PED_IS_USING(myPed);
 		bool inVeh = PED::IS_PED_IN_ANY_VEHICLE(myPed, true) == 1;
 
-		if ((CONTROLS::IS_CONTROL_JUST_PRESSED(2, 74) || get_key_pressed(DEPLOY_KEY)) &&
+		if (((USE_CONTROLLER && CONTROLS::IS_CONTROL_JUST_PRESSED(2, 74))
+			|| get_key_pressed(DEPLOY_KEY)) &&
 			GetTickCount() > pressTick && step == 0)
 		{
 			pressTick = GetTickCount() + 1000;
@@ -212,14 +183,21 @@ void ScriptMain() // EntryPoint
 				Vector3 bone = ENTITY::GET_WORLD_POSITION_OF_ENTITY_BONE(
 					myVeh, ENTITY::GET_ENTITY_BONE_INDEX_BY_NAME(myVeh, "wheel_lr"));
 				modelPos = ENTITY::GET_ENTITY_COORDS(myVeh, 1);
-				if (GAMEPLAY::GET_GROUND_Z_FOR_3D_COORD(modelPos.x, modelPos.y, bone.z, &(modelPos.z), 0) != 0)
+
+				if (GAMEPLAY::GET_GROUND_Z_FOR_3D_COORD(modelPos.x, modelPos.y, bone.z, &(modelPos.z), 0) == 0)
 					modelPos.z = bone.z - 0.2f;
 				
 				modelRot = ENTITY::GET_ENTITY_ROTATION(myVeh, false);
 			}
 			else {
 				modelPos = ENTITY::GET_ENTITY_COORDS(myPed, 1);
-				modelPos.z -= 0.6f;
+				Vector3 forward = ENTITY::GET_ENTITY_FORWARD_VECTOR(myPed);
+				modelPos.x += forward.x;
+				modelPos.y += forward.y;
+
+				if (GAMEPLAY::GET_GROUND_Z_FOR_3D_COORD(modelPos.x, modelPos.y, modelPos.z, &(modelPos.z), 0) == 0)
+					modelPos.z -= 0.6f;
+
 				modelRot = ENTITY::GET_ENTITY_ROTATION(myPed, false);
 			}
 
@@ -239,26 +217,31 @@ void ScriptMain() // EntryPoint
 			if (useCam) {
 				CAM::POINT_CAM_AT_COORD(camScripted, modelPos.x, modelPos.y, modelPos.z + 0.2f);
 
+				CAM::SET_CAM_COORD(camScripted, modelPos.x - 6.0f, modelPos.y - 6.0f, modelPos.z + 1.5f);
 				bool bypassAttach = true;
-				for (unsigned short i = 0; i < worldGetAllVehicles(PoolVehStck, 1024); i++)
+				for (unsigned short i = 0; i < worldGetAllVehicles(PoolVehHeap, VEH_POOL_SIZE); i++)
 				{
-					if (PoolVehStck[i] != myVeh)
+					if (PoolVehHeap[i] != myVeh)
 					{
-						Vector3 curVehPos = ENTITY::GET_ENTITY_COORDS(PoolVehStck[i], 1);
+						Vector3 curVehPos = ENTITY::GET_ENTITY_COORDS(PoolVehHeap[i], 1);
 						if (__VDIST(curVehPos, modelPos) <= 15.0f)
 						{
 							Vector3 max, min;
-							GAMEPLAY::GET_MODEL_DIMENSIONS(ENTITY::GET_ENTITY_MODEL(PoolVehStck[i]), &min, &max);
-							CAM::ATTACH_CAM_TO_ENTITY(camScripted, PoolVehStck[i], 0.0f, 0.0f, max.z + 2.0f, 1);
+							GAMEPLAY::GET_MODEL_DIMENSIONS(ENTITY::GET_ENTITY_MODEL(PoolVehHeap[i]), &min, &max);
+							CAM::ATTACH_CAM_TO_ENTITY(camScripted, PoolVehHeap[i], 0.0f, 0.0f, max.z + 2.0f, 1);
 							bypassAttach = false;
 							break;
 						}
 					}
 				}
-				if (bypassAttach)
-					CAM::SET_CAM_COORD(camScripted, modelPos.x - 6.0f, modelPos.y - 6.0f, modelPos.z + 1.5f);
+				if (bypassAttach && inVeh)
+				{
+					Vector3 max, min;
+					GAMEPLAY::GET_MODEL_DIMENSIONS(ENTITY::GET_ENTITY_MODEL(myVeh), &min, &max);
+					CAM::ATTACH_CAM_TO_ENTITY(camScripted, myVeh, 0.0f, 0.0f, max.z + 2.0f, 1);
+				}
 
-				CAM::RENDER_SCRIPT_CAMS(1, 0, camScripted, 1, 1);
+				CAM::RENDER_SCRIPT_CAMS(1, 0, 0, 1, 1);
 			}
 
 			AUDIO::PLAY_SOUND_FROM_ENTITY(-1, "DROP_STINGER", curSpike, "BIG_SCORE_3A_SOUNDS", 0, 0);
@@ -271,9 +254,10 @@ void ScriptMain() // EntryPoint
 
 		}
 
-		if ((CONTROLS::IS_CONTROL_JUST_PRESSED(2, 48) || get_key_pressed(CLEAR_KEY)) &&
-			GetTickCount() > pressTick) {
-
+		if (((USE_CONTROLLER && CONTROLS::IS_CONTROL_JUST_PRESSED(2, 48))
+			|| get_key_pressed(CLEAR_KEY)) &&
+			GetTickCount() > pressTick)
+		{
 			pressTick = GetTickCount() + 1000;
 
 			for (unsigned short i = 0; i < spikesCount; i++)
@@ -307,7 +291,7 @@ void ScriptMain() // EntryPoint
 		case 16:
 			if (GetTickCount() > TickStep)
 			{
-				CAM::RENDER_SCRIPT_CAMS(0, 0, camScripted, 1, 1);
+				CAM::RENDER_SCRIPT_CAMS(0, 0, 0, 1, 1);
 
 				if (useCam) {
 					CAM::DETACH_CAM(camScripted);
@@ -320,7 +304,7 @@ void ScriptMain() // EntryPoint
 		case 32:
 		{
 			if (TickStep > GetTickCount())
-				draw_text_shadow("~w~Spikes ~g~deployed ~w~!", 6.0f, screen_h - 30.0f, screen_w / 2.4f, 9.0f, textColor, 1, 0.50f);
+				draw_text_shadow("~w~Spikes ~g~deployed ~w~!", 0.47f, 0.95f, textColor, 1, 0.50f);
 			else
 			{
 				ENTITY::FREEZE_ENTITY_POSITION(lastSpike, true);
@@ -331,7 +315,7 @@ void ScriptMain() // EntryPoint
 		case 64:
 		{
 			if (TickStep > GetTickCount())
-				draw_text_shadow("~w~Spikes ~r~removed ~w~!", 6.0f, screen_h - 30.0f, screen_w / 2.4f, 9.0f, textColor, 1, 0.50f);
+				draw_text_shadow("~w~Spikes ~r~removed ~w~!", 0.47f, 0.95f, textColor, 1, 0.50f);
 			else
 				step = 0;
 		}
@@ -340,12 +324,12 @@ void ScriptMain() // EntryPoint
 
 		if (spikesCount != 0)
 		{
-			if (GetTickCount() > TickCheck) // 10 Hz
+			if (GetTickCount() > TickCheck) // 17 Hz
 			{
-				for (unsigned short i = 0; i < worldGetAllVehicles(PoolVehStck, 1024); i++)
-					if (PoolVehStck[i] != myVeh) // (includeMe ? true : PoolVehStck[i] != myVeh)
+				for (unsigned short i = 0; i < worldGetAllVehicles(PoolVehHeap, VEH_POOL_SIZE); i++)
+					if (PoolVehHeap[i] != myVeh) // (includeMe ? true : PoolVehStck[i] != myVeh)
 					{
-						int victimVeh = PoolVehStck[i];
+						int victimVeh = PoolVehHeap[i];
 
 						Vector3 curVehPos = ENTITY::GET_ENTITY_COORDS(victimVeh, 1);
 						for (unsigned short it = 0; it < spikesCount; it++)
@@ -358,40 +342,28 @@ void ScriptMain() // EntryPoint
 									victimVeh,
 									ENTITY::GET_ENTITY_BONE_INDEX_BY_NAME(victimVeh, (char*)tyres[it1].name));
 
-								if (__VDIST(wheelPos, spikePos) < 3.0 &&
+								if (__VDIST(wheelPos, spikePos) <= 2.6f &&
 									!VEHICLE::IS_VEHICLE_TYRE_BURST(victimVeh, tyres[it1].id, 0))
 								{
 									VEHICLE::SET_VEHICLE_TYRE_BURST(victimVeh, tyres[it1].id, 1, 1.0f);
 									victimCount++;
 								}
 							}
-
-							/// if (SYSTEM::VDIST2(curVehPos.x, curVehPos.y, curVehPos.z,
-							/// 	spikePos.x, spikePos.y, spikePos.z) < 4.0)
-							/// {
-							/// 	if (!VEHICLE::IS_VEHICLE_TYRE_BURST(victimVeh, 0, 0) &&
-							/// 		!VEHICLE::IS_VEHICLE_TYRE_BURST(victimVeh, 1, 0) &&
-							/// 		!VEHICLE::IS_VEHICLE_TYRE_BURST(victimVeh, 2, 0) &&
-							/// 		!VEHICLE::IS_VEHICLE_TYRE_BURST(victimVeh, 3, 0) &&
-							/// 		!VEHICLE::IS_VEHICLE_TYRE_BURST(victimVeh, 4, 0) &&
-							/// 		!VEHICLE::IS_VEHICLE_TYRE_BURST(victimVeh, 5, 0))
-							/// 		victimCount++;
-							/// 
-							/// 	applyDestroy(victimVeh);
-							/// }
 						}
 					}
-				TickCheck = GetTickCount() + 100;
+				TickCheck = GetTickCount() + 58;
 			}
 
 			if (showVictims == true)
 			{
 				sprintf_s(victimesText, "Tires Burst : ~b~%d    ~w~%s", victimCount,
 					useCam ? "~g~CAM" : "~r~CAM"); //, includeMe ? "~g~ME" : "~r~ME");
-				draw_text_shadow(victimesText, 6.0f, 3.0f, screen_w / 2.2f, 9.0f, textColor, 6, 0.5f);
+				draw_text_shadow(victimesText, 0.47f, 0.01f, textColor, 6, 0.5f);
 			}
 		}
 
 		WAIT(0);
 	}
+
+	delete[] PoolVehHeap;
 }
