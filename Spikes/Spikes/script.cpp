@@ -68,6 +68,7 @@ static const Tyre tyres[] = {
 	{ 5, "wheel_rr" },
 };
 
+// YES ... It's not good VDIST ( but it's faster and more precise for this mod )
 static inline float __VDIST(Vector3 &One, Vector3 &Two) {
 	return fabsf(One.x - Two.x) + fabsf(One.y - Two.y) + fabsf(One.z - Two.z);
 }
@@ -170,7 +171,9 @@ void ScriptMain() // EntryPoint
 		int myVeh = PED::GET_VEHICLE_PED_IS_USING(myPed);
 		bool inVeh = PED::IS_PED_IN_ANY_VEHICLE(myPed, true) == 1;
 
-		if (((USE_CONTROLLER && CONTROLS::IS_CONTROL_JUST_PRESSED(2, 74))
+		if (((USE_CONTROLLER &&
+			CONTROLS::IS_CONTROL_PRESSED(2, 85) &&
+			CONTROLS::IS_CONTROL_PRESSED(2, 258))
 			|| get_key_pressed(DEPLOY_KEY)) &&
 			GetTickCount() > pressTick && step == 0)
 		{
@@ -224,7 +227,7 @@ void ScriptMain() // EntryPoint
 					if (PoolVehHeap[i] != myVeh)
 					{
 						Vector3 curVehPos = ENTITY::GET_ENTITY_COORDS(PoolVehHeap[i], 1);
-						if (__VDIST(curVehPos, modelPos) <= 15.0f)
+						if (__VDIST(curVehPos, modelPos) <= 25.0f)
 						{
 							Vector3 max, min;
 							GAMEPLAY::GET_MODEL_DIMENSIONS(ENTITY::GET_ENTITY_MODEL(PoolVehHeap[i]), &min, &max);
@@ -254,7 +257,9 @@ void ScriptMain() // EntryPoint
 
 		}
 
-		if (((USE_CONTROLLER && CONTROLS::IS_CONTROL_JUST_PRESSED(2, 48))
+		if (((USE_CONTROLLER &&
+			CONTROLS::IS_CONTROL_PRESSED(2, 74) &&
+			CONTROLS::IS_CONTROL_PRESSED(2, 258))
 			|| get_key_pressed(CLEAR_KEY)) &&
 			GetTickCount() > pressTick)
 		{
